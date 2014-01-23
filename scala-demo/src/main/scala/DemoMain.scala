@@ -34,29 +34,13 @@ class DemoHandler(io: ActorRef) extends HttpServiceActor {
       path("sum-demo") {
         requestContext =>
           val start = System.currentTimeMillis()
-          (io ? Get("http://127.0.0.1:8888/random")).mapTo[HttpResponse].map {
-            res => res.entity.asString.toInt
-          }.flatMap {
-            p1 =>
-              (io ? Get("http://127.0.0.1:8888/random")).mapTo[HttpResponse].map {
-                res => res.entity.asString.toInt
-              }.map {
-                p2 =>
-                  (p1, p2)
-              }
-          }.flatMap {
-            case (p1, p2) =>
-              (io ? Get(s"http://127.0.0.1:8888/add?p1=${p1}&p2=${p2}")).mapTo[HttpResponse].map {
-                res =>
-                  val sum = res.entity.asString.toInt
-                  (p1, p2, sum)
-              }
-
-          }.onSuccess {
-            case (p1, p2, sum) =>
-              val after = System.currentTimeMillis()
-              println(s"sum  times spent ${after - start}")
-              requestContext.complete(s"${p1} + ${p2} = ${sum}")
+          val (f1, f2) = (io ? Get("http://127.0.0.1:8888/random"), io ? Get("http://127.0.0.1:8888/random"))
+          Future.sequence(List(f1, f2)).onSuccess {
+            case (r1: HttpResponse) :: (r2: HttpResponse) :: Nil =>
+              val (p1, p2) = (r1.entity.asString, r2.entity.asString)
+              (io ? Get(s"http://127.0.0.1:8888/add?p1=${p1}&p2=${p2}")).onSuccess {
+              case r: HttpResponse =>requestContext.complete(s"${p1} + ${p2} = ${r.entity.asString}")
+            }
           }
       } ~
         path("morra-demo") {
